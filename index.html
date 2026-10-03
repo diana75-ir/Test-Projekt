@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aufgaben-Dashboard</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --surface: #ffffff; --border: #e1e4e8; --text: #1d2125; --muted: #626f7a;
+    --accent: #2f5bd3; --danger: #c62828; --danger-bg: #fdecea; --warn: #a15c00; --warn-bg: #fff4e0;
+    --ok: #2e7d32; --ok-bg: #e8f5e9; --chip: #eef1f5;
+    --confluence: #1868db; --onenote: #7719aa; --outlook: #0f6cbd;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #15181c; --surface: #1f2329; --border: #343a42; --text: #e6e8eb; --muted: #9aa5b1;
+      --accent: #7aa2ff; --danger: #ff8a80; --danger-bg: #3a1f1f; --warn: #ffc56b; --warn-bg: #3a2e18;
+      --ok: #81c784; --ok-bg: #1e3321; --chip: #2a3038;
+      --confluence: #6ea8ff; --onenote: #c58af0; --outlook: #69aef5;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  .wrap { max-width: 1200px; margin: 0 auto; padding: 24px 16px 48px; }
+  header { display: flex; flex-wrap: wrap; gap: 12px; align-items: baseline; justify-content: space-between; }
+  h1 { font-size: 1.5rem; margin: 0; }
+  .sub { color: var(--muted); margin: 4px 0 0; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin: 20px 0; }
+  .stat { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+  .stat b { display: block; font-size: 1.6rem; font-variant-numeric: tabular-nums; }
+  .stat span { color: var(--muted); font-size: .85rem; }
+  .stat.danger b { color: var(--danger); } .stat.warn b { color: var(--warn); }
+  .filters { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px; display: grid; gap: 12px; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .row > label { color: var(--muted); font-size: .85rem; min-width: 80px; }
+  .chip { border: 1px solid var(--border); background: var(--chip); color: var(--text); border-radius: 999px; padding: 4px 12px; font: inherit; font-size: .88rem; cursor: pointer; }
+  .chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+  input[type=search], select { font: inherit; padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); }
+  input[type=search] { flex: 1; min-width: 180px; }
+  .btn { font: inherit; font-size: .88rem; padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer; }
+  .btn:hover, .chip:hover { border-color: var(--accent); }
+  .cluster { margin-top: 24px; }
+  .cluster h2 { font-size: 1.1rem; margin: 0 0 8px; display: flex; gap: 8px; align-items: center; }
+  .cluster h2 .count { font-size: .8rem; color: var(--muted); font-weight: normal; }
+  .table-wrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; }
+  table { width: 100%; border-collapse: collapse; min-width: 720px; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { font-size: .8rem; color: var(--muted); font-weight: 600; cursor: pointer; user-select: none; white-space: nowrap; }
+  tr:last-child td { border-bottom: 0; }
+  td.date { white-space: nowrap; font-variant-numeric: tabular-nums; }
+  tr.done td:not(:first-child) { opacity: .5; } tr.done .task { text-decoration: line-through; }
+  .src { font-size: .78rem; font-weight: 600; padding: 2px 8px; border-radius: 6px; border: 1px solid currentColor; white-space: nowrap; }
+  .src.Confluence { color: var(--confluence); } .src.OneNote { color: var(--onenote); } .src.Outlook { color: var(--outlook); }
+  .due { font-size: .78rem; padding: 2px 8px; border-radius: 6px; margin-left: 6px; white-space: nowrap; }
+  .due.over { background: var(--danger-bg); color: var(--danger); }
+  .due.today { background: var(--warn-bg); color: var(--warn); }
+  .due.week { background: var(--ok-bg); color: var(--ok); }
+  .meeting { color: var(--muted); }
+  a { color: var(--accent); }
+  .empty { text-align: center; color: var(--muted); padding: 40px 0; }
+  .note { font-size: .82rem; color: var(--muted); margin-top: 8px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Aufgaben-Dashboard</h1>
+      <p class="sub">Aufgaben aus Confluence, OneNote und Outlook – gruppiert nach Thema</p>
+    </div>
+    <div class="row">
+      <button class="btn" id="importBtn" title="CSV- oder JSON-Datei mit Aufgaben laden">Aufgaben importieren</button>
+      <button class="btn" id="resetBtn" title="Importierte Aufgaben verwerfen, wieder tasks.js verwenden">Import zurücksetzen</button>
+      <input type="file" id="fileInput" accept=".csv,.json,.txt" hidden>
+    </div>
+  </header>
+
+  <section class="stats" id="stats"></section>
+
+  <section class="filters">
+    <div class="row"><label>Fälligkeit</label><div class="row" id="dueFilter"></div></div>
+    <div class="row"><label>Thema</label><div class="row" id="topicFilter"></div></div>
+    <div class="row"><label>Quelle</label><div class="row" id="sourceFilter"></div></div>
+    <div class="row">
+      <label for="search">Suche</label>
+      <input type="search" id="search" placeholder="Task oder Meeting durchsuchen …">
+      <label style="min-width:auto"><input type="checkbox" id="showDone"> erledigte anzeigen</label>
+    </div>
+  </section>
+
+  <main id="clusters"></main>
+  <p class="note" id="dataNote"></p>
+</div>
+
+<script src="tasks.js"></script>
+<script>
+(() => {
+  const DAY = 86400000;
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+
+  const DUE_FILTERS = [
+    ["alle", "Alle"], ["over", "Überfällig"], ["today", "Heute"], ["week", "Nächste 7 Tage"],
+    ["month", "Nächste 30 Tage"], ["later", "Später"], ["none", "Ohne Datum"],
+  ];
+
+  // --- Speicher (nur lokal im Browser, darf fehlen) ---
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } },
+    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+    del(k) { try { localStorage.removeItem(k); } catch {} },
+  };
+
+  let imported = store.get("dashboard.imported", null);
+  let tasks = normalize(imported || window.TASKS || []);
+  const done = new Set(store.get("dashboard.done", []));
+  const state = { due: "alle", topics: new Set(), sources: new Set(), q: "", showDone: false, sort: "faellig" };
+
+  // --- Hilfsfunktionen ---
+  function parseDate(s) {
+    if (!s) return null;
+    s = String(s).trim();
+    let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+    if (m) return new Date(+m[1], m[2] - 1, +m[3]);
+    m = s.match(/^(\d{1,2})\.(\d{1,2})\.(\d{2,4})/);
+    if (m) return new Date(m[3].length === 2 ? 2000 + +m[3] : +m[3], m[2] - 1, +m[1]);
+    const d = new Date(s);
+    return isNaN(d) ? null : new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  }
+  const fmt = d => d ? d.toLocaleDateString("de-CH", { day: "2-digit", month: "2-digit", year: "numeric" }) : "–";
+  const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+  function normalize(list) {
+    return list.map((t, i) => {
+      const quelle = String(t.quelle || "").trim();
+      const src = ["Confluence", "OneNote", "Outlook"].find(s => s.toLowerCase() === quelle.toLowerCase()) || quelle || "Unbekannt";
+      const erstellt = parseDate(t.erstellt), faellig = parseDate(t.faellig);
+      const id = t.id || [src, t.erstellt, t.task].join("|");
+      return { id, quelle: src, erstellt, faellig, meeting: t.meeting || "", task: t.task || "", thema: (t.thema || "Ohne Thema").trim(), link: t.link || "", idx: i };
+    });
+  }
+
+  function dueClass(t) {
+    if (!t.faellig) return "none";
+    const diff = Math.round((t.faellig - today) / DAY);
+    if (diff < 0) return "over";
+    if (diff === 0) return "today";
+    if (diff <= 7) return "week";
+    if (diff <= 30) return "month";
+    return "later";
+  }
+  function matchesDue(t, f) {
+    if (f === "alle") return true;
+    const c = dueClass(t);
+    if (f === "week") return c === "today" || c === "week";
+    if (f === "month") return c === "today" || c === "week" || c === "month";
+    return c === f;
+  }
+
+  // --- Filter-Leisten ---
+  function chips(el, items, isOn, onClick) {
+    el.innerHTML = "";
+    items.forEach(([val, label]) => {
+      const b = document.createElement("button");
+      b.className = "chip"; b.textContent = label; b.setAttribute("aria-pressed", isOn(val));
+      b.onclick = () => { onClick(val); render(); };
+      el.appendChild(b);
+    });
+  }
+  function toggle(set, v) { v === "*" ? set.clear() : set.has(v) ? set.delete(v) : set.add(v); }
+
+  function renderFilters() {
+    chips(document.getElementById("dueFilter"), DUE_FILTERS, v => state.due === v, v => state.due = v);
+    const topics = [...new Set(tasks.map(t => t.thema))].sort((a, b) => a.localeCompare(b, "de"));
+    chips(document.getElementById("topicFilter"), [["*", "Alle"], ...topics.map(t => [t, t])],
+      v => v === "*" ? state.topics.size === 0 : state.topics.has(v), v => toggle(state.topics, v));
+    const sources = [...new Set(tasks.map(t => t.quelle))].sort();
+    chips(document.getElementById("sourceFilter"), [["*", "Alle"], ...sources.map(s => [s, s])],
+      v => v === "*" ? state.sources.size === 0 : state.sources.has(v), v => toggle(state.sources, v));
+  }
+
+  // --- Anzeige ---
+  function render() {
+    renderFilters();
+    const q = state.q.toLowerCase();
+    const visible = tasks.filter(t =>
+      (state.showDone || !done.has(t.id)) &&
+      matchesDue(t, state.due) &&
+      (!state.topics.size || state.topics.has(t.thema)) &&
+      (!state.sources.size || state.sources.has(t.quelle)) &&
+      (!q || (t.task + " " + t.meeting).toLowerCase().includes(q)));
+
+    const open = tasks.filter(t => !done.has(t.id));
+    const count = c => open.filter(t => dueClass(t) === c).length;
+    document.getElementById("stats").innerHTML = [
+      ["Offene Aufgaben", open.length, ""],
+      ["Überfällig", count("over"), "danger"],
+      ["Heute fällig", count("today"), "warn"],
+      ["Nächste 7 Tage", count("week"), ""],
+      ["Erledigt", tasks.length - open.length, ""],
+    ].map(([l, n, c]) => `<div class="stat ${c}"><b>${n}</b><span>${l}</span></div>`).join("");
+
+    const groups = {};
+    visible.forEach(t => (groups[t.thema] ||= []).push(t));
+    const cmp = {
+      faellig: (a, b) => (a.faellig ?? Infinity) - (b.faellig ?? Infinity),
+      erstellt: (a, b) => (b.erstellt ?? 0) - (a.erstellt ?? 0),
+      quelle: (a, b) => a.quelle.localeCompare(b.quelle),
+      meeting: (a, b) => a.meeting.localeCompare(b.meeting, "de"),
+      task: (a, b) => a.task.localeCompare(b.task, "de"),
+    }[state.sort];
+
+    const host = document.getElementById("clusters");
+    const names = Object.keys(groups).sort((a, b) => a.localeCompare(b, "de"));
+    if (!names.length) { host.innerHTML = `<p class="empty">Keine Aufgaben für diese Filter.</p>`; return; }
+
+    const head = [["", ""], ["quelle", "Quelle"], ["erstellt", "Erstellt"], ["meeting", "Meeting / Zusammenhang"], ["task", "Task"], ["faellig", "Fällig bis"]]
+      .map(([k, l]) => `<th data-sort="${k}">${l}${state.sort === k ? " ▾" : ""}</th>`).join("");
+
+    host.innerHTML = names.map(name => {
+      const rows = groups[name].sort(cmp).map(t => {
+        const c = dueClass(t), isDone = done.has(t.id);
+        const badge = isDone ? "" : { over: "überfällig", today: "heute", week: "bald" }[c];
+        const taskHtml = t.link ? `<a href="${esc(t.link)}" target="_blank" rel="noopener">${esc(t.task)}</a>` : esc(t.task);
+        return `<tr class="${isDone ? "done" : ""}">
+          <td><input type="checkbox" data-id="${esc(t.id)}" ${isDone ? "checked" : ""} title="Als erledigt markieren"></td>
+          <td><span class="src ${esc(t.quelle)}">${esc(t.quelle)}</span></td>
+          <td class="date">${fmt(t.erstellt)}</td>
+          <td class="meeting">${esc(t.meeting)}</td>
+          <td class="task">${taskHtml}</td>
+          <td class="date">${fmt(t.faellig)}${badge ? `<span class="due ${c}">${badge}</span>` : ""}</td>
+        </tr>`;
+      }).join("");
+      return `<section class="cluster"><h2>${esc(name)} <span class="count">${groups[name].length} Aufgabe(n)</span></h2>
+        <div class="table-wrap"><table><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table></div></section>`;
+    }).join("");
+
+    host.querySelectorAll("th[data-sort]").forEach(th => th.dataset.sort && (th.onclick = () => { state.sort = th.dataset.sort; render(); }));
+    host.querySelectorAll("input[data-id]").forEach(cb => cb.onchange = () => {
+      cb.checked ? done.add(cb.dataset.id) : done.delete(cb.dataset.id);
+      store.set("dashboard.done", [...done]); render();
+    });
+
+    document.getElementById("dataNote").textContent = imported
+      ? `Datenquelle: importierte Datei (${tasks.length} Aufgaben). Stand heute: ${fmt(today)}.`
+      : `Datenquelle: tasks.js (${tasks.length} Aufgaben). Stand heute: ${fmt(today)}.`;
+  }
+
+  // --- Import (CSV oder JSON) ---
+  const HEADER_MAP = {
+    quelle: ["quelle", "source", "tool"],
+    erstellt: ["erstellt", "erstellungsdatum", "created", "datum", "startdatum", "start date"],
+    meeting: ["meeting", "zusammenhang", "kontext", "context", "besprechung"],
+    task: ["task", "aufgabe", "betreff", "subject", "titel", "title"],
+    faellig: ["faellig", "fällig", "fällig bis", "fälligkeitsdatum", "due", "due date", "fällig am"],
+    thema: ["thema", "topic", "kategorie", "kategorien", "categories", "category"],
+    link: ["link", "url"],
+  };
+  function parseCSV(text) {
+    const first = text.split(/\r?\n/)[0];
+    const sep = (first.match(/;/g) || []).length > (first.match(/,/g) || []).length ? ";" : ",";
+    const rows = []; let row = [], cell = "", inQ = false;
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      if (inQ) { if (ch === '"' && text[i + 1] === '"') { cell += '"'; i++; } else if (ch === '"') inQ = false; else cell += ch; }
+      else if (ch === '"') inQ = true;
+      else if (ch === sep) { row.push(cell); cell = ""; }
+      else if (ch === "\n") { row.push(cell.replace(/\r$/, "")); rows.push(row); row = []; cell = ""; }
+      else cell += ch;
+    }
+    if (cell || row.length) { row.push(cell); rows.push(row); }
+    const head = rows.shift().map(h => h.trim().replace(/^﻿/, "").toLowerCase());
+    const col = {};
+    for (const [key, names] of Object.entries(HEADER_MAP)) col[key] = head.findIndex(h => names.includes(h));
+    return rows.filter(r => r.some(c => c.trim())).map(r => {
+      const o = {};
+      for (const k in col) o[k] = col[k] >= 0 ? (r[col[k]] || "").trim() : "";
+      return o;
+    });
+  }
+
+  const fileInput = document.getElementById("fileInput");
+  document.getElementById("importBtn").onclick = () => fileInput.click();
+  fileInput.onchange = async () => {
+    const f = fileInput.files[0]; if (!f) return;
+    try {
+      const text = await f.text();
+      const raw = f.name.toLowerCase().endsWith(".json") ? JSON.parse(text) : parseCSV(text);
+      if (!Array.isArray(raw) || !raw.length) throw new Error("Keine Aufgaben gefunden.");
+      imported = raw; tasks = normalize(raw); store.set("dashboard.imported", raw);
+      state.topics.clear(); state.sources.clear(); render();
+    } catch (e) { alert("Import fehlgeschlagen: " + e.message); }
+    fileInput.value = "";
+  };
+  document.getElementById("resetBtn").onclick = () => {
+    imported = null; store.del("dashboard.imported"); tasks = normalize(window.TASKS || []);
+    state.topics.clear(); state.sources.clear(); render();
+  };
+
+  document.getElementById("search").oninput = e => { state.q = e.target.value; render(); };
+  document.getElementById("showDone").onchange = e => { state.showDone = e.target.checked; render(); };
+
+  render();
+})();
+</script>
+</body>
+</html>
