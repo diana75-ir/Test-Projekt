@@ -1,2 +1,2 @@
 # Test-Projekt
-Test für Claude Code
+Test für claude/codex.test
